@@ -58,6 +58,7 @@ export default function Navbar() {
         { href: '/privacy-policy', label: 'Privacy' },
         { href: '/refund-policy', label: 'Refunds' },
         { href: '/terms', label: 'Terms' },
+        { href: '/contact', label: 'Contact' },
     ]
 
     return (
@@ -167,8 +168,8 @@ export default function Navbar() {
                                 key={link.href}
                                 href={link.href}
                                 className={`block py-2 px-4 rounded-lg transition-colors ${pathname === link.href
-                                        ? 'bg-primary/10 text-primary'
-                                        : 'text-foreground-muted hover:bg-white/5'
+                                    ? 'bg-primary/10 text-primary'
+                                    : 'text-foreground-muted hover:bg-white/5'
                                     }`}
                                 onClick={() => setIsOpen(false)}
                             >

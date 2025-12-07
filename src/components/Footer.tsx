@@ -45,6 +45,11 @@ export default function Footer() {
                                     Sign Up
                                 </Link>
                             </li>
+                            <li>
+                                <Link href="/contact" className="text-foreground-muted hover:text-foreground transition-colors">
+                                    Contact Us
+                                </Link>
+                            </li>
                         </ul>
                     </div>
 
