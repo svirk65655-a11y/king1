@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { X, Loader2, CreditCard, CheckCircle, XCircle } from 'lucide-react'
+import { X, Loader2, CreditCard, CheckCircle, XCircle, Tag } from 'lucide-react'
 import { formatPrice } from '@/lib/utils'
 import type { Product } from '@/lib/types'
 
@@ -53,6 +53,22 @@ export default function PaymentModal({ product, isOpen, onClose, onSuccess }: Pa
     const [status, setStatus] = useState<PaymentStatus>('idle')
     const [error, setError] = useState<string | null>(null)
 
+    // Promo code state
+    const [promoCode, setPromoCode] = useState('')
+    const [promoLoading, setPromoLoading] = useState(false)
+    const [promoError, setPromoError] = useState<string | null>(null)
+    const [appliedPromo, setAppliedPromo] = useState<{
+        code: string
+        discount_percent: number
+    } | null>(null)
+
+    // Calculate prices
+    const originalPrice = product.price
+    const discountAmount = appliedPromo
+        ? (originalPrice * appliedPromo.discount_percent) / 100
+        : 0
+    const finalPrice = originalPrice - discountAmount
+
     useEffect(() => {
         // Load Razorpay script
         const script = document.createElement('script')
@@ -69,19 +85,61 @@ export default function PaymentModal({ product, isOpen, onClose, onSuccess }: Pa
         if (isOpen) {
             setStatus('idle')
             setError(null)
+            setPromoCode('')
+            setPromoError(null)
+            setAppliedPromo(null)
         }
     }, [isOpen])
+
+    const applyPromoCode = async () => {
+        if (!promoCode.trim()) return
+
+        setPromoLoading(true)
+        setPromoError(null)
+
+        try {
+            const res = await fetch('/api/promo/validate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code: promoCode }),
+            })
+
+            const data = await res.json()
+
+            if (!res.ok) {
+                throw new Error(data.error || 'Invalid promo code')
+            }
+
+            setAppliedPromo({
+                code: data.code,
+                discount_percent: data.discount_percent,
+            })
+            setPromoCode('')
+        } catch (err) {
+            setPromoError(err instanceof Error ? err.message : 'Invalid promo code')
+        } finally {
+            setPromoLoading(false)
+        }
+    }
+
+    const removePromoCode = () => {
+        setAppliedPromo(null)
+        setPromoError(null)
+    }
 
     const handlePayment = async () => {
         try {
             setStatus('creating')
             setError(null)
 
-            // Create order
+            // Create order with promo code
             const orderRes = await fetch('/api/payment/create-order', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ productId: product.id }),
+                body: JSON.stringify({
+                    productId: product.id,
+                    promoCode: appliedPromo?.code || null,
+                }),
             })
 
             const orderData = await orderRes.json()
@@ -194,19 +252,79 @@ export default function PaymentModal({ product, isOpen, onClose, onSuccess }: Pa
                                         <p className="text-sm text-foreground-muted capitalize">{product.type} Product</p>
                                     </div>
                                     <div className="text-right">
-                                        <span className="text-xl font-bold text-indigo-400">
-                                            {formatPrice(product.price)}
+                                        <span className={`text-xl font-bold ${appliedPromo ? 'text-foreground-muted line-through text-base' : 'text-indigo-400'}`}>
+                                            {formatPrice(originalPrice)}
                                         </span>
+                                        {appliedPromo && (
+                                            <div className="text-xl font-bold text-green-400">
+                                                {formatPrice(finalPrice)}
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
+                            </div>
+
+                            {/* Promo Code Section */}
+                            <div className="mb-6">
+                                <label className="label mb-2">Promo Code</label>
+                                {appliedPromo ? (
+                                    <div className="flex items-center justify-between p-3 rounded-lg bg-green-500/10 border border-green-500/30">
+                                        <div className="flex items-center gap-2">
+                                            <Tag className="w-4 h-4 text-green-400" />
+                                            <span className="font-mono font-semibold text-green-400">
+                                                {appliedPromo.code}
+                                            </span>
+                                            <span className="text-green-400 text-sm">
+                                                ({appliedPromo.discount_percent}% OFF)
+                                            </span>
+                                        </div>
+                                        <button
+                                            onClick={removePromoCode}
+                                            className="text-green-400 hover:text-green-300 text-sm"
+                                        >
+                                            Remove
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="text"
+                                            value={promoCode}
+                                            onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
+                                            placeholder="Enter code"
+                                            className="input flex-1 font-mono"
+                                            onKeyDown={(e) => e.key === 'Enter' && applyPromoCode()}
+                                        />
+                                        <button
+                                            onClick={applyPromoCode}
+                                            disabled={promoLoading || !promoCode.trim()}
+                                            className="btn btn-outline"
+                                        >
+                                            {promoLoading ? (
+                                                <Loader2 className="w-4 h-4 animate-spin" />
+                                            ) : (
+                                                'Apply'
+                                            )}
+                                        </button>
+                                    </div>
+                                )}
+                                {promoError && (
+                                    <p className="text-red-400 text-sm mt-2">{promoError}</p>
+                                )}
                             </div>
 
                             {/* Order Details */}
                             <div className="space-y-3 mb-6">
                                 <div className="flex justify-between text-sm">
                                     <span className="text-foreground-muted">Subtotal</span>
-                                    <span>{formatPrice(product.price)}</span>
+                                    <span>{formatPrice(originalPrice)}</span>
                                 </div>
+                                {appliedPromo && (
+                                    <div className="flex justify-between text-sm text-green-400">
+                                        <span>Discount ({appliedPromo.discount_percent}%)</span>
+                                        <span>-{formatPrice(discountAmount)}</span>
+                                    </div>
+                                )}
                                 <div className="flex justify-between text-sm">
                                     <span className="text-foreground-muted">Tax</span>
                                     <span>Included</span>
@@ -214,7 +332,7 @@ export default function PaymentModal({ product, isOpen, onClose, onSuccess }: Pa
                                 <div className="divider" />
                                 <div className="flex justify-between font-semibold">
                                     <span>Total</span>
-                                    <span className="text-indigo-400">{formatPrice(product.price)}</span>
+                                    <span className="text-indigo-400">{formatPrice(finalPrice)}</span>
                                 </div>
                             </div>
 
@@ -251,7 +369,7 @@ export default function PaymentModal({ product, isOpen, onClose, onSuccess }: Pa
                                 {status === 'idle' && (
                                     <>
                                         <CreditCard className="w-4 h-4" />
-                                        Pay {formatPrice(product.price)}
+                                        Pay {formatPrice(finalPrice)}
                                     </>
                                 )}
                             </button>

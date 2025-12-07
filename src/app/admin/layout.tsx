@@ -9,7 +9,8 @@ import {
     CreditCard,
     Settings,
     Receipt,
-    ArrowLeft
+    ArrowLeft,
+    Tag
 } from 'lucide-react'
 
 export default async function AdminLayout({
@@ -42,6 +43,7 @@ export default async function AdminLayout({
     const navItems = [
         { href: '/admin', label: 'Dashboard', icon: LayoutDashboard },
         { href: '/admin/products', label: 'Products', icon: Package },
+        { href: '/admin/promo-codes', label: 'Promo Codes', icon: Tag },
         { href: '/admin/users', label: 'Users', icon: Users },
         { href: '/admin/transactions', label: 'Transactions', icon: Receipt },
         { href: '/admin/content', label: 'Content', icon: FileText },
