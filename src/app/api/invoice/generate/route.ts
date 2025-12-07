@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createServerClient } from '@supabase/ssr'
 
 export async function GET(request: NextRequest) {
     try {
@@ -10,19 +10,24 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: 'Invoice ID required' }, { status: 400 })
         }
 
-        const supabase = await createClient()
-        const { data: { user } } = await supabase.auth.getUser()
+        // Use service role client to fetch invoice
+        // The invoice UUID itself serves as a secret token for access
+        const supabase = createServerClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.SUPABASE_SERVICE_ROLE_KEY!,
+            {
+                cookies: {
+                    getAll: () => [],
+                    setAll: () => { },
+                },
+            }
+        )
 
-        if (!user) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-        }
-
-        // Get invoice
+        // Get invoice by ID (UUID is the secure access token)
         const { data: invoice, error } = await supabase
             .from('invoices')
             .select('*')
             .eq('id', invoiceId)
-            .eq('user_id', user.id)
             .single()
 
         if (error || !invoice) {
