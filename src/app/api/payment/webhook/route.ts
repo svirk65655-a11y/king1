@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { createServerClient } from '@supabase/ssr'
-import { sendPurchaseEmail } from '@/lib/email'
+import { sendPurchaseEmail, sendInvoiceEmail } from '@/lib/email'
 
 export async function POST(request: NextRequest) {
     try {
@@ -58,10 +58,10 @@ export async function POST(request: NextRequest) {
             const orderId = payment.order_id
             const paymentId = payment.id
 
-            // Get transaction
+            // Get transaction with promo code info
             const { data: transaction, error: txError } = await supabase
                 .from('transactions')
-                .select('*, product:products(*), profile:profiles(*)')
+                .select('*, product:products(*), profile:profiles(*), promo_code:promo_codes(*)')
                 .eq('razorpay_order_id', orderId)
                 .single()
 
@@ -103,7 +103,30 @@ export async function POST(request: NextRequest) {
                     access_link: accessLink,
                 })
 
-                // Send email
+                // Generate invoice number
+                const { data: invoiceNum } = await supabase.rpc('generate_invoice_number')
+                const invoiceNumber = invoiceNum || `INV-${Date.now()}`
+
+                // Create invoice record
+                const { data: invoice } = await supabase
+                    .from('invoices')
+                    .insert({
+                        invoice_number: invoiceNumber,
+                        transaction_id: transaction.id,
+                        user_id: transaction.user_id,
+                        product_id: transaction.product_id,
+                        amount: transaction.amount,
+                        discount_amount: transaction.discount_amount || 0,
+                        promo_code: transaction.promo_code?.code || null,
+                        customer_email: transaction.profile?.email || '',
+                        customer_name: transaction.profile?.full_name || null,
+                        product_name: transaction.product?.name || 'Digital Product',
+                        razorpay_payment_id: paymentId,
+                    })
+                    .select()
+                    .single()
+
+                // Send purchase confirmation email with invoice info
                 try {
                     await sendPurchaseEmail({
                         to: transaction.profile?.email || '',
@@ -111,6 +134,22 @@ export async function POST(request: NextRequest) {
                         productType: transaction.product?.type || 'pdf',
                         accessLink: accessLink || '',
                     })
+
+                    // Send invoice email
+                    if (invoice) {
+                        await sendInvoiceEmail({
+                            to: transaction.profile?.email || '',
+                            invoiceNumber: invoiceNumber,
+                            customerName: transaction.profile?.full_name || 'Customer',
+                            productName: transaction.product?.name || 'Digital Product',
+                            amount: transaction.amount,
+                            discountAmount: transaction.discount_amount || 0,
+                            promoCode: transaction.promo_code?.code || null,
+                            paymentId: paymentId,
+                            invoiceId: invoice.id,
+                            purchaseDate: new Date().toISOString(),
+                        })
+                    }
                 } catch (emailError) {
                     console.error('Failed to send email:', emailError)
                 }
